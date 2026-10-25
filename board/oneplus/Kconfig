@@ -1,0 +1,5 @@
+config ONEPLUS_OP6893
+    bool "Support OnePlus Nord 2"
+    default n
+    help
+      Say Y if you want to include support for OnePlus Nord 2
