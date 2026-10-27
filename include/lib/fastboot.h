@@ -36,6 +36,7 @@ struct fastboot_command {
 void fastboot_register_commands(void);
 
 void fastboot_info(const char* reason);
+void fastboot_info_str(const char* reason);
 void fastboot_fail(const char* reason);
 void fastboot_okay(const char* reason);
 void fastboot_register(const char* prefix, void (*handle)(const char* arg, void* data, unsigned sz),

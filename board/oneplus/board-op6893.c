@@ -4,11 +4,139 @@
 //
 
 #include <board_ops.h>
+#include <arch/cache.h>
+
+#define VENEER_SIZE 12u
+
+#define SECCFG_GET_LOCK_STATE_ADDRESS 0x4827766Cu
+
+#define GET_VFY_POLICY_ADDRESS 0x4821ACB8u
+#define GET_DL_POLICY_ADDRESS 0x4821ACC4u
+#define FASTBOOT_GATE_ADDRESS 0x4822F408u
+#define FASTBOOT_GATE_CALL_ADDRESS 0x4827802Cu
+#define FASTBOOT_HANDLER_ADDRESS 0x4822F41Cu
+
+#define ORANGE_WARNING_ADDRESS 0x4824EB00u
+#define DM_VERITY_WARNING_ADDRESS 0x48264958u
+
+// load_and_verify_vbmeta(): the vbmeta chain is re-signed by us, so the key
+// length, the key comparison and the trusted flag all have to be neutralised
+// while the bootloader reports itself locked.
+#define AVB_CHAIN_KEY_LENGTH_ADDRESS 0x482613C0u
+#define AVB_CHAIN_KEY_CHECK_ADDRESS 0x482616EAu
+#define AVB_KEY_TRUSTED_ADDRESS 0x48261758u
+
+static void install_veneer(uint32_t slot, void *target) {
+    WRITE32(slot + 0, 0xC004F8DFu);
+    WRITE16(slot + 4, 0x4760u);
+    WRITE16(slot + 6, 0xBF00u);
+    WRITE32(slot + 8, (uint32_t)target | 1u);
+
+    arch_sync_cache_range(slot, VENEER_SIZE);
+}
+
+// Every patch is applied to a hardcoded address from the stock image. Check the
+// original instruction first: a mismatch must leave the bootloader untouched,
+// never branch into whatever happens to be there.
+static bool expect16(uint32_t addr, uint16_t value) {
+    uint16_t cur = READ16(addr);
+
+    if (cur == value)
+        return true;
+
+    printf("Skipping patch at 0x%08X: expected 0x%04X, found 0x%04X\n",
+           (unsigned)addr, (unsigned)value, (unsigned)cur);
+    return false;
+}
+
+static bool expect_bl(uint32_t addr, uint32_t target) {
+    target &= ~1u;
+
+    if (DECODE_BL_TARGET(addr) == target)
+        return true;
+
+    printf("Skipping hook at 0x%08X: does not call 0x%08X\n",
+           (unsigned)addr, (unsigned)target);
+    return false;
+}
+
+// Replacement for the bootloader's seccfg lock state getter.
+//
+// The veneer is only installed while the spoof is active, so this always
+// reports the device as locked. It stays self-contained: LK calls it from
+// every context that cares about the lock state, so it must not touch the
+// environment or the console.
+static int lock_state_hook(uint32_t *lock_state) {
+    if (!lock_state)
+        return 1;
+
+    *lock_state = LKS_LOCK;
+    return 0;
+}
+
+// Apply the lock-state spoof. Returns true when the getter was redirected, so
+// the caller knows the boot path is actually spoofed.
+static bool spoof_lock_state(void) {
+    bool applied = is_spoofing_enabled() &&
+                   expect16(SECCFG_GET_LOCK_STATE_ADDRESS, 0xB1D0);
+
+    if (applied)
+        install_veneer(SECCFG_GET_LOCK_STATE_ADDRESS, (void *)lock_state_hook);
+
+    fastboot_publish("is-spoofing", applied ? "1" : "0");
+
+    if (!applied)
+        return false;
+
+    // In fastboot mode the kernel is not booted; keep the getter patch so the
+    // lock state is consistent, but leave the kernel/AVB path alone.
+    if (get_bootmode() == BOOTMODE_FASTBOOT)
+        return true;
+
+    if (expect16(AVB_CHAIN_KEY_LENGTH_ADDRESS, 0x429A))
+        PATCH_MEM(AVB_CHAIN_KEY_LENGTH_ADDRESS, 0x451B); /* cmp r3, r3 */
+
+    if (expect16(AVB_CHAIN_KEY_CHECK_ADDRESS, 0xF47F) &&
+        expect16(AVB_CHAIN_KEY_CHECK_ADDRESS + 2, 0xAE6C))
+        NOP(AVB_CHAIN_KEY_CHECK_ADDRESS, 2);
+
+    if (expect16(AVB_KEY_TRUSTED_ADDRESS, 0xF8DC) &&
+        expect16(AVB_KEY_TRUSTED_ADDRESS + 2, 0x3000))
+        PATCH_MEM(AVB_KEY_TRUSTED_ADDRESS, 0x2301, 0xBF00);
+
+    return true;
+}
+
+// Registered as allowed while security is on: the whole point of the spoof is
+// that the device reports itself locked, so the command that turns it back off
+// must not be subject to that same lock state.
+FASTBOOT_CMD(bldr_spoof, "oem bldr_spoof", cmd_spoof_bootloader_lock, 1);
 
 void board_early_init(void) {
-    printf("Entering early init for OnePlus Nord 2\n");
+    // These three are needed for the modified bootloader to boot and for
+    // fastboot to stay reachable; they are not part of the lock-state toggle.
+    if (expect16(GET_VFY_POLICY_ADDRESS, 0xB508))
+        FORCE_RETURN(GET_VFY_POLICY_ADDRESS, 0);
+
+    if (expect16(GET_DL_POLICY_ADDRESS, 0xB508))
+        FORCE_RETURN(GET_DL_POLICY_ADDRESS, 0);
+
+    if (expect_bl(FASTBOOT_GATE_ADDRESS, FASTBOOT_GATE_CALL_ADDRESS))
+        PATCH_BRANCH(FASTBOOT_GATE_ADDRESS, (void *)FASTBOOT_HANDLER_ADDRESS);
 }
 
 void board_late_init(void) {
-    printf("Entering late init for OnePlus Nord 2\n");
+    bool spoofed = spoof_lock_state();
+
+    if (!spoofed)
+        return;
+
+    // On an unlocked bootloader these screens also introduce a five-second
+    // delay. Hide them only while the spoof is active; with the spoof off the
+    // stock warnings and their delay are left untouched.
+    if (expect16(ORANGE_WARNING_ADDRESS, 0xB508))
+        FORCE_RETURN(ORANGE_WARNING_ADDRESS, 0);
+
+    if (expect16(DM_VERITY_WARNING_ADDRESS, 0x2802))
+        FORCE_RETURN(DM_VERITY_WARNING_ADDRESS, 0);
 }

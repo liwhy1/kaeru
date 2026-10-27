@@ -8,6 +8,7 @@
 #include <lib/recovery.h>
 
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
+#include <arch/cache.h>
 #include <lib/bootargs.h>
 #include <lib/spoof.h>
 #endif
@@ -69,6 +70,23 @@ const char* reboot_target_to_misc_command(const char* target) {
 }
 
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
+#ifdef CONFIG_RECOVERY_CMDLINE_END_ADDRESS
+// LK keeps a cursor into the global cmdline so later appends know where to
+// continue. The helper below moves the tail around, so keep it in sync.
+static void adjust_cmdline_end(int delta) {
+    if (!CONFIG_RECOVERY_CMDLINE_END_ADDRESS)
+        return;
+
+    volatile uint32_t *end =
+        (volatile uint32_t*)CONFIG_RECOVERY_CMDLINE_END_ADDRESS;
+    uint32_t base = CONFIG_RECOVERY_CMDLINE1_ADDRESS;
+    uint32_t cur = *end;
+
+    if (base && cur >= base && cur <= base + CMDLINE_LEN)
+        *end = cur + delta;
+}
+#endif
+
 // When booting into recovery, we need to ensure verifiedbootstate is set
 // to "orange" so adbd and fastbootd detect the device as unlocked. With
 // the spoofed locked state they both refuse to do anything, no adb access
@@ -92,8 +110,13 @@ void handle_recovery_boot(void) {
             continue;
 
         printf("Patching cmdline at 0x%08X\n", cmdline_addrs[i]);
-        cmdline_replace((char*)cmdline_addrs[i],
-                        "androidboot.verifiedbootstate=", "green", "orange");
+        if (cmdline_replace((char*)cmdline_addrs[i],
+                            "androidboot.verifiedbootstate=", "green", "orange")) {
+#ifdef CONFIG_RECOVERY_CMDLINE_END_ADDRESS
+            if (cmdline_addrs[i] == CONFIG_RECOVERY_CMDLINE1_ADDRESS)
+                adjust_cmdline_end(1);
+#endif
+        }
     }
 }
 #endif

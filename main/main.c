@@ -4,6 +4,7 @@
 //
 
 #include <arch/arm.h>
+#include <arch/cache.h>
 #include <board_ops.h>
 #include <main/main.h>
 
