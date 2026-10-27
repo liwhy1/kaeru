@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <lib/bootmode.h>
 
 struct misc_message {

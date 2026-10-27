@@ -282,6 +282,13 @@ menu "Recovery Support"
             help
               Address of the second cmdline buffer, if the image has one.
               Leave at 0 otherwise.
+
+        config RECOVERY_CMDLINE_END_ADDRESS
+            hex "Cmdline end cursor address"
+            default 0x0
+            help
+              Address of LK's global cmdline append cursor, if present.
+              Leave at 0 if the bootloader does not maintain one.
     endif
 endmenu
 

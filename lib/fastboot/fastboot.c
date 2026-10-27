@@ -29,6 +29,10 @@ void fastboot_info(const char* reason) {
     _send_info("INFO", reason);
 }
 
+void fastboot_info_str(const char* reason) {
+    _send_info("INFO", "%s", reason);
+}
+
 void fastboot_register(const char* prefix,
                        void (*handle)(const char* arg, void* data, unsigned sz),
                        unsigned char security_enabled) {
@@ -58,6 +62,10 @@ void fastboot_fail(const char* reason) {
 
 void fastboot_info(const char* reason) {
     ((void (*)(const char*))(CONFIG_FASTBOOT_INFO_ADDRESS | 1))(reason);
+}
+
+void fastboot_info_str(const char* reason) {
+    ((void (*)(const char*, ...))(CONFIG_FASTBOOT_INFO_ADDRESS | 1))("%s", reason);
 }
 
 void fastboot_register(const char* prefix,
