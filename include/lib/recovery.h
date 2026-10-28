@@ -20,6 +20,9 @@ bool misc_command_is_for_ramdisk(const char* command);
 bool misc_command_is_system(const char* command);
 const char* reboot_target_to_misc_command(const char* target);
 
+int is_recovery_key_enabled(void);
+void cmd_recovery_key(const char* arg, void* data, unsigned sz);
+
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
 void handle_recovery_boot(void);
 #endif

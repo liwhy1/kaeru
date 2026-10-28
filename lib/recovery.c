@@ -4,8 +4,13 @@
 //
 
 #include <lib/common.h>
+#include <lib/fastboot.h>
 #include <lib/string.h>
 #include <lib/recovery.h>
+
+#ifdef CONFIG_ENVIRONMENT_SUPPORT
+#include <lib/environment.h>
+#endif
 
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
 #include <arch/cache.h>
@@ -68,6 +73,76 @@ const char* reboot_target_to_misc_command(const char* target) {
     if (!strcmp(target, "fastboot_please")) return "fastboot_please";
     return NULL;
 }
+
+// The volume-up recovery shortcut is enabled unless the environment explicitly
+// disables it, so existing images keep the behaviour they were built with.
+int is_recovery_key_enabled(void) {
+#ifdef CONFIG_ENVIRONMENT_SUPPORT
+    const char* val = get_env(KAERU_ENV_RECOVERY_KEY);
+    return !val || strcmp(val, "0") != 0;
+#else
+    return 1;
+#endif
+}
+
+void cmd_recovery_key(const char* arg, void* data, unsigned sz) {
+    (void)data;
+    (void)sz;
+
+    int status = is_recovery_key_enabled();
+    const char* option = arg ? arg : "";
+    while (*option == ' ')
+        option++;
+    int target = -1;
+
+    if (!option[0])                  target = !status;
+    else if (!strcmp(option, "on"))  target = 1;
+    else if (!strcmp(option, "off")) target = 0;
+
+    if (target != -1) {
+        if (status != target) {
+#ifdef CONFIG_ENVIRONMENT_SUPPORT
+            set_env(KAERU_ENV_RECOVERY_KEY, target ? "1" : "0");
+#else
+            fastboot_fail("Environment support is disabled.");
+            return;
+#endif
+            fastboot_info(target ?
+                "Volume-up recovery enabled." :
+                "Volume-up recovery disabled.");
+            fastboot_info("Reboot required.");
+        } else {
+            fastboot_info(target ?
+                "Volume-up recovery is already enabled." :
+                "Volume-up recovery is already disabled.");
+        }
+        fastboot_publish("recovery-key", target ? "1" : "0");
+        fastboot_okay("");
+        return;
+    }
+
+    if (!strcmp(option, "status")) {
+        fastboot_info(status ?
+            "Volume-up recovery is currently enabled." :
+            "Volume-up recovery is currently disabled.");
+        fastboot_okay("");
+        return;
+    }
+
+    fastboot_info("kaeru volume-up recovery key control");
+    fastboot_info("");
+    fastboot_info("When enabled, holding volume-up at boot enters recovery.");
+    fastboot_info("Volume-down still follows the stock fastboot path.");
+    fastboot_info("");
+    fastboot_info("Commands:");
+    fastboot_info("  (none) - Toggle the shortcut");
+    fastboot_info("  on     - Enable the shortcut (reboot required)");
+    fastboot_info("  off    - Disable the shortcut (reboot required)");
+    fastboot_info("  status - Show current state");
+    fastboot_fail("Usage: fastboot oem recovery_key <on|off|status>");
+}
+
+FASTBOOT_CMD(recovery_key, "oem recovery_key", cmd_recovery_key, 1);
 
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
 #ifdef CONFIG_RECOVERY_CMDLINE_END_ADDRESS

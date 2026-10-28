@@ -8,6 +8,20 @@
 
 #define VENEER_SIZE 12u
 
+// Volume-down is checked with the stock OnePlus helper, which configures GPIO
+// 155 before reading it. Volume-up is not a GPIO: it is the MT6359P HOMEKEY,
+// exposed as TOPSTATUS bit 3 and read through LK's own PMIC helper. The stock
+// app entry itself uses these same two functions for its key combo.
+#define VOLUME_DOWN_CHECK_ADDRESS 0x4822C2B4u
+#define PMIC_HOMEKEY_PRESSED_ADDRESS 0x4821F678u
+#define BOOT_DELAY_ADDRESS 0x4825D840u
+
+// The stock early boot path calls this RTC check before choosing the image.
+// Redirect that one call so volume-up selects recovery in the same place the
+// stock RTC factory-reset bit does, before mt_boot has picked an image.
+#define EARLY_RTC_CHECK_CALL_ADDRESS 0x48204732u
+#define RTC_RECOVERY_CHECK_ADDRESS 0x48220FD4u
+
 #define SECCFG_GET_LOCK_STATE_ADDRESS 0x4827766Cu
 
 #define GET_VFY_POLICY_ADDRESS 0x4821ACB8u
@@ -25,6 +39,48 @@
 #define AVB_CHAIN_KEY_LENGTH_ADDRESS 0x482613C0u
 #define AVB_CHAIN_KEY_CHECK_ADDRESS 0x482616EAu
 #define AVB_KEY_TRUSTED_ADDRESS 0x48261758u
+
+static void boot_delay(unsigned ms) {
+    ((void (*)(unsigned))(BOOT_DELAY_ADDRESS | 1))(ms);
+}
+
+static bool pmic_homekey_pressed(void) {
+    return ((bool (*)(void))(PMIC_HOMEKEY_PRESSED_ADDRESS | 1))();
+}
+
+// TOPSTATUS jitters when no key is pressed, so require three consecutive
+// pressed samples. A key that is actually held passes all three.
+static bool volume_up_pressed(void) {
+    if (!pmic_homekey_pressed())
+        return false;
+
+    boot_delay(20);
+    if (!pmic_homekey_pressed())
+        return false;
+
+    boot_delay(20);
+    return pmic_homekey_pressed();
+}
+
+// The stock helper configures GPIO 155, waits for the debounce, then reads it.
+// It is only called when volume-up is already pressed, so a normal boot pays
+// nothing for it.
+static bool volume_down_pressed(void) {
+    return ((uint32_t (*)(void))(VOLUME_DOWN_CHECK_ADDRESS | 1))() != 0;
+}
+
+// Replaces the early boot path's RTC factory-reset check. Returning true makes
+// the stock code set BOOTMODE_RECOVERY before the app is selected, so no reset
+// is needed and holding the key through the next boot cannot loop.
+static bool recovery_check_hook(void) {
+    if (((bool (*)(void))(RTC_RECOVERY_CHECK_ADDRESS | 1))())
+        return true;
+
+    if (!is_recovery_key_enabled())
+        return false;
+
+    return volume_up_pressed() && !volume_down_pressed();
+}
 
 static void install_veneer(uint32_t slot, void *target) {
     WRITE32(slot + 0, 0xC004F8DFu);
@@ -123,9 +179,15 @@ void board_early_init(void) {
 
     if (expect_bl(FASTBOOT_GATE_ADDRESS, FASTBOOT_GATE_CALL_ADDRESS))
         PATCH_BRANCH(FASTBOOT_GATE_ADDRESS, (void *)FASTBOOT_HANDLER_ADDRESS);
+
+    if (expect_bl(EARLY_RTC_CHECK_CALL_ADDRESS, RTC_RECOVERY_CHECK_ADDRESS))
+        PATCH_CALL(EARLY_RTC_CHECK_CALL_ADDRESS, (void *)recovery_check_hook,
+                   TARGET_THUMB);
 }
 
 void board_late_init(void) {
+    fastboot_publish("recovery-key", is_recovery_key_enabled() ? "1" : "0");
+
     bool spoofed = spoof_lock_state();
 
     if (!spoofed)
