@@ -179,8 +179,13 @@ menu "Fastboot Support"
     endif
 
     config FASTBOOT_HELP_COMMAND
-        def_bool FASTBOOT_CMDLIST_ADDRESS != 0x0
+        bool "Enable 'fastboot oem help'"
+        default y if FASTBOOT_CMDLIST_ADDRESS != 0x0
         depends on FASTBOOT_STYLE_STANDARD
+        help
+          Say Y to register 'oem help', which lists kaeru's own oem
+          commands and their usage. If FASTBOOT_CMDLIST_ADDRESS is set,
+          the stock oem commands are listed as well.
 
     config FASTBOOT_CMDLIST_ADDRESS
         hex "fastboot command list address"
@@ -191,9 +196,9 @@ menu "Fastboot Support"
           registration onto, i.e. the head pointer of the bootloader's
           fastboot command list.
 
-          Set it to enable 'fastboot oem help', which walks that list and
-          reports every oem command the bootloader answers to. Leave it at
-          0 if you have not located the global on your target.
+          Set it to let 'fastboot oem help' also walk that list and
+          report every stock oem command the bootloader answers to. Leave
+          it at 0 if you have not located the global on your target.
 
     config FASTBOOT_MEM_COMMAND
         bool "Enable 'fastboot oem mem'"

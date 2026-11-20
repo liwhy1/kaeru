@@ -8,7 +8,9 @@
 #include <lib/debug.h>
 #include <lib/fastboot.h>
 #include <lib/string.h>
+#include <main/main.h>
 
+#if CONFIG_FASTBOOT_CMDLIST_ADDRESS
 static struct fastboot_cmd* fastboot_cmdlist(void) {
     return *(struct fastboot_cmd**)CONFIG_FASTBOOT_CMDLIST_ADDRESS;
 }
@@ -22,27 +24,53 @@ static bool cmd_is_shadowed(const struct fastboot_cmd* cmd) {
 
     return false;
 }
+#endif
 
-void cmd_help(const char* arg, void* data, unsigned sz) {
-    const struct fastboot_cmd* cmd = fastboot_cmdlist();
-    if (!cmd) {
-        fastboot_fail("Command list is not available");
-        return;
-    }
+static const char* reloc_str(const char* s) {
+    return (const char*)((uintptr_t)s + kaeru_reloc_delta);
+}
 
+static void help_line(const char* usage) {
     char line[FASTBOOT_INFO_MAX + 1];
 
-    fastboot_info("Available oem commands:");
-    for (; cmd; cmd = cmd->next) {
-        if (!cmd->prefix || strncmp(cmd->prefix, "oem ", 4) != 0 || cmd_is_shadowed(cmd)) {
+    npf_snprintf(line, sizeof(line), "  %s", usage);
+    fastboot_info(line);
+}
+
+void cmd_help(const char* arg, void* data, unsigned sz) {
+    (void)arg;
+    (void)data;
+    (void)sz;
+
+    fastboot_info("kaeru commands:");
+    for (const struct fastboot_command* c = __fastboot_cmds_start; c < __fastboot_cmds_end; c++) {
+        if (!c->prefix) {
             continue;
         }
 
-        npf_snprintf(line, sizeof(line), "  %s", cmd->prefix);
-        fastboot_info(line);
+        const char* prefix = reloc_str(c->prefix);
+        if (strncmp(prefix, "oem ", 4) != 0) {
+            continue;
+        }
+
+        help_line(c->usage ? reloc_str(c->usage) : prefix);
     }
+
+#if CONFIG_FASTBOOT_CMDLIST_ADDRESS
+    const struct fastboot_cmd* cmd = fastboot_cmdlist();
+    if (cmd) {
+        fastboot_info("stock oem commands:");
+        for (; cmd; cmd = cmd->next) {
+            if (!cmd->prefix || strncmp(cmd->prefix, "oem ", 4) != 0 || cmd_is_shadowed(cmd)) {
+                continue;
+            }
+
+            help_line(cmd->prefix);
+        }
+    }
+#endif
 
     fastboot_okay("");
 }
 
-FASTBOOT_CMD(help, "oem help", cmd_help, 1);
+FASTBOOT_CMD_USAGE(help, "oem help", cmd_help, 1, "oem help");

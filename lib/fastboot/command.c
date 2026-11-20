@@ -7,9 +7,6 @@
 #include <lib/fastboot.h>
 #include <main/main.h>
 
-extern const struct fastboot_command __fastboot_cmds_start[];
-extern const struct fastboot_command __fastboot_cmds_end[];
-
 void fastboot_register_commands(void) {
     for (const struct fastboot_command* c = __fastboot_cmds_start; c < __fastboot_cmds_end; c++) {
         const char* prefix = (const char*)((uintptr_t)c->prefix + kaeru_reloc_delta);

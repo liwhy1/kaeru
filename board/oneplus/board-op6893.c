@@ -166,7 +166,8 @@ static bool spoof_lock_state(void) {
 // Registered as allowed while security is on: the whole point of the spoof is
 // that the device reports itself locked, so the command that turns it back off
 // must not be subject to that same lock state.
-FASTBOOT_CMD(bldr_spoof, "oem bldr_spoof", cmd_spoof_bootloader_lock, 1);
+FASTBOOT_CMD_USAGE(bldr_spoof, "oem bldr_spoof", cmd_spoof_bootloader_lock, 1,
+                   "oem bldr_spoof [on|off|status]");
 
 static void cmd_reboot_emergency(const char* arg, void* data, unsigned sz) {
     (void)arg;
@@ -180,7 +181,8 @@ static void cmd_reboot_emergency(const char* arg, void* data, unsigned sz) {
 
 // Enter MediaTek BootROM (emergency download) mode. This is the recovery path
 // when the bootloader itself is unusable; no key combo or test point is needed.
-FASTBOOT_CMD(reboot_emergency, "oem reboot-emergency", cmd_reboot_emergency, 1);
+FASTBOOT_CMD_USAGE(reboot_emergency, "oem reboot-emergency", cmd_reboot_emergency, 1,
+                   "oem reboot-emergency");
 
 void board_early_init(void) {
     // These three are needed for the modified bootloader to boot and for
