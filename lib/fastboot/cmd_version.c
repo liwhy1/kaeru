@@ -22,5 +22,5 @@ void cmd_version(const char* arg, void* data, unsigned sz) {
 }
 
 #ifndef CONFIG_EXCLUDE_BRANDING
-FASTBOOT_CMD(version, "oem kaeru-version", cmd_version, 1);
+FASTBOOT_CMD_USAGE(version, "oem kaeru-version", cmd_version, 1, "oem kaeru-version");
 #endif

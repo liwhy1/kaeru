@@ -127,4 +127,5 @@ void cmd_env(const char *arg, void *data, unsigned sz) {
     fastboot_fail("Usage: fastboot oem env <get|set>");
 }
 
-FASTBOOT_CMD(env, "oem env", cmd_env, 1);
+FASTBOOT_CMD_USAGE(env, "oem env", cmd_env, 1,
+                   "oem env get <key> | set <key> <value>");

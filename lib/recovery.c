@@ -142,7 +142,8 @@ void cmd_recovery_key(const char* arg, void* data, unsigned sz) {
     fastboot_fail("Usage: fastboot oem recovery_key <on|off|status>");
 }
 
-FASTBOOT_CMD(recovery_key, "oem recovery_key", cmd_recovery_key, 1);
+FASTBOOT_CMD_USAGE(recovery_key, "oem recovery_key", cmd_recovery_key, 1,
+                   "oem recovery_key [on|off|status]");
 
 #ifdef CONFIG_RECOVERY_CMDLINE_PATCH
 #ifdef CONFIG_RECOVERY_CMDLINE_END_ADDRESS

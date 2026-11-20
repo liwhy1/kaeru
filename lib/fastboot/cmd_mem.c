@@ -113,4 +113,5 @@ void cmd_mem(const char* arg, void* data, unsigned sz) {
     fastboot_fail("Usage: oem mem read|write <addr> [len|value]");
 }
 
-FASTBOOT_CMD(mem, "oem mem", cmd_mem, 1);
+FASTBOOT_CMD_USAGE(mem, "oem mem", cmd_mem, 1,
+                   "oem mem read <addr> [len] | write <addr> <value>");

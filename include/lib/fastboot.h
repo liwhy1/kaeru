@@ -23,15 +23,23 @@ struct fastboot_command {
     const char* prefix;
     void (*handle)(const char* arg, void* data, unsigned sz);
     int security;
+    const char* usage;
 };
 
-#define FASTBOOT_CMD(id, str, fn, sec)                                      \
+extern const struct fastboot_command __fastboot_cmds_start[];
+extern const struct fastboot_command __fastboot_cmds_end[];
+
+#define FASTBOOT_CMD_USAGE(id, str, fn, sec, use)                           \
     static const struct fastboot_command __fastboot_cmd_##id                \
             __attribute__((used, section(".fastboot_cmds"), aligned(4))) = { \
                     .prefix = (str),                                        \
                     .handle = (fn),                                         \
                     .security = (sec),                                      \
+                    .usage = (use),                                         \
             }
+
+#define FASTBOOT_CMD(id, str, fn, sec) \
+    FASTBOOT_CMD_USAGE(id, str, fn, sec, 0)
 
 void fastboot_register_commands(void);
 
