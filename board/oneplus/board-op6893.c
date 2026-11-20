@@ -168,6 +168,20 @@ static bool spoof_lock_state(void) {
 // must not be subject to that same lock state.
 FASTBOOT_CMD(bldr_spoof, "oem bldr_spoof", cmd_spoof_bootloader_lock, 1);
 
+static void cmd_reboot_emergency(const char* arg, void* data, unsigned sz) {
+    (void)arg;
+    (void)data;
+    (void)sz;
+
+    fastboot_info("Rebooting into BootROM/EDL mode...");
+    fastboot_okay("");
+    reboot_emergency();
+}
+
+// Enter MediaTek BootROM (emergency download) mode. This is the recovery path
+// when the bootloader itself is unusable; no key combo or test point is needed.
+FASTBOOT_CMD(reboot_emergency, "oem reboot-emergency", cmd_reboot_emergency, 1);
+
 void board_early_init(void) {
     // These three are needed for the modified bootloader to boot and for
     // fastboot to stay reachable; they are not part of the lock-state toggle.
